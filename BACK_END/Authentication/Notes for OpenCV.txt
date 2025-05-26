@@ -1,0 +1,29 @@
+1) Basic program to open the camera, wait for the enter key to be pressed and then capture the current frame 
+
+import cv2
+
+camera = cv2.VideoCapture(0, cv2.CAP_DSHOW) --> Here 0 means that we are using the deafault webcam i.e. camera number 0 and CAP_DSHOW flag tells that we are using the DirectShow backend (many others are available)
+
+cv2.waitKey(1000) --> Here we are waiting for 1 second
+
+print("Press enter to capture an image")
+
+while True:
+    ret, frame = camera.read() --> Here ret meands a boolean value, true if the frame is captured successfully, else false i.e. either camera not available or not working. The frame contains the actualo image in the form of a Numpy array
+    if not ret:
+        print("Camera failed to capture the frame")
+        break
+    cv2.imshow("Live feed. Press enter to capture a frame", frame) --> Show the live feed of the camera and displat the given text as tthe title
+    
+    key = cv2.waitKey(1) --> Wait for 1 second to look for a key press
+    
+    if(key == 13): --> If the pressed key is the enter key 
+        cv2.imwrite("sampleImage.jpg", frame) --> Save the image capture as 'frame' with the given name in the current working directory
+        print("Image saved successfully...")
+        break
+        
+        
+# cleanup commands
+
+camera.relase() --> Release all the camera resources and this is important as it may lead to the camera being locked for other programs
+cv2.destroyAllWindows() --> Close all the camera related windows

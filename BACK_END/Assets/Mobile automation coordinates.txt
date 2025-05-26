@@ -1,0 +1,43 @@
+mobile coordinates 
+
+DOUBLE TAP TO WAKE SCREEN
+
+(500, 945)
+
+SWIPE UP 
+
+(313, 1952) to (100, 785) 
+
+TYPING THE PIN
+ 
+0 --> (537, 1674)
+1 --> (270, 970)
+2 --> (520, 983)
+3 --> (800, 965)
+4 --> (275, 1229)
+5 --> (530, 1229)
+6 --> (808, 1196)
+7 --> (300, 1436)
+8 --> (550, 1436)
+9 --> (803, 1436)
+
+OPENING NOTIFICATIONS
+
+(480, 727) to (434, 1376)
+
+
+CLICKING ON THE SEACH BAR
+
+(252, 200)
+
+NOTES APP 
+
+(150, 470)
+
+Search button in notes app
+
+(845, 230)
+
+Selecting the note
+
+(275, 660)

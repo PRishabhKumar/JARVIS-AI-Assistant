@@ -1,0 +1,7 @@
+For mobile automation, I have used the following softwares and steps : 
+
+1) ADB Command Line tools --> The Android Debugging Bridge SDK tools can be downloaded from the internet and they you to connect your phone to your computer to achieve tasks like phone automation
+
+2) srcpy --> This siftware can be downloaded from GiutHub and helps in mirroring your phone screen to your computer and it is really smooth and lag-free because it uses USB connection. 
+
+3) We have created a windows execution file called device.bat in the root directory where we have the code for connecting our mobile to the computer using WIFI so that we need not connect our phone to the computer through USB every time. 
