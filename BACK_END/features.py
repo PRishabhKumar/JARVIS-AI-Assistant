@@ -1,6 +1,7 @@
 import playsound as ps
 import eel
 import os
+import sys
 import pymongo
 import webbrowser as wb
 import datetime
@@ -61,15 +62,21 @@ def detectHotword():
 
 
 # Play start sound
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller .exe """
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 @eel.expose
 def playStartSound():
     try:
-        sound_directory = r"FRONT_END\Assets\Audio\start_sound.mp3"
+        sound_directory = resource_path(r"FRONT_END\Assets\Audio\start_sound.mp3")
         print('Starting sound play !!')
         ps.playsound(sound_directory)
         print("Sound play complete !!!")
     except Exception as e:
         print("The following error occured : ", e)
+
 
 
 
@@ -468,7 +475,7 @@ def setup_model(api_key):
         "response_mime_type": "text/plain",
     }
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name="gemini-2.5-flash",
         generation_config=generation_config,
     )
     return model
@@ -584,3 +591,15 @@ def notifications():
         command = "adb shell input swipe 500 0 500 1000 100"
         os.system(command)
         speak("Opened Notifications sir....")
+        
+        
+# Closing JARVIS
+
+def closeJARVIS():
+    speak("Ok sir closing the application..")
+    speak("It was a pleasure serving you sir ...Bye sir")
+    gui.keyDown("ctrl")
+    gui.keyDown("w")
+    time.sleep(0.1)
+    gui.keyUp("w")
+    gui.keyUp("ctrl")

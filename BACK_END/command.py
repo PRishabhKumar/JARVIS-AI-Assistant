@@ -103,7 +103,10 @@ def commands(message=1):
             unlockPhone()
         elif("check my notifications" in command.lower() or "open notifications" in command.lower() or "show my notifications" in command.lower()):
             from BACK_END.features import notifications
-            notifications()                   
+            notifications()
+        elif("close the application" in command.lower() or "close" in command.lower() or "stop" in command.lower() or "that's all for now" in command.lower()):
+            from BACK_END.features import closeJARVIS
+            closeJARVIS()                   
         else:
             from BACK_END.features import setup_model
             model = setup_model(api_keys.geminiAPI)
