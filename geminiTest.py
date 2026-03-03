@@ -1,13 +1,16 @@
 # First install the SDK:
 # pip install google-genai
 
+import os
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from API_KEYS import api_keys
+
+load_dotenv()
 
 def query_gemini(prompt: str):
     # Create client with your API key
-    client = genai.Client(api_key=api_keys.geminiAPI)
+    client = genai.Client(api_key=os.getenv("geminiAPI"))
 
     # Send a generation request
     response = client.models.generate_content(

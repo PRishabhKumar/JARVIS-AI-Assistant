@@ -6,3 +6,8 @@ build/
 dist/
 roadmap.md
 mobileAutomationNotes.txt
+.env
+ollama_test.py
+test_ollama_router.py
+new_features_plan.md
+UI_change_plan.md

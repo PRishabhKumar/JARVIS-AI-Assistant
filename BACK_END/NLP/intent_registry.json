@@ -1,0 +1,106 @@
+{
+  "OPEN_APP_WEB": [
+    "open the browser",
+    "launch chrome",
+    "start calculator",
+    "go to youtube.com",
+    "open netflix",
+    "start visual studio code",
+    "open my photos",
+    "launch the settings",
+    "go to google",
+    "open the notepad app"
+  ],
+  "PLAY_YOUTUBE": [
+    "play despacito on youtube",
+    "search for coding tutorials on youtube",
+    "start playing music on yt",
+    "find a video of kittens on youtube",
+    "play the latest news on youtube",
+    "on youtube play some lo-fi beats",
+    "search for rick and morty on youtube",
+    "play iron man trailer on youtube"
+  ],
+  "PLAY_MUSIC": [
+    "play some music",
+    "start the music player",
+    "i want to listen to songs",
+    "play my local playlist",
+    "start playing my offline songs",
+    "play music for me jarvis",
+    "open my music library",
+    "hit the play button for music"
+  ],
+  "SEND_WHATSAPP": [
+    "send a whatsapp message",
+    "text someone on whatsapp",
+    "open my whatsapp chats",
+    "i want to message my friend on whatsapp",
+    "send a chat to my contact",
+    "whatsapp a message",
+    "start a new conversation on whatsapp"
+  ],
+  "SET_ALARM": [
+    "set an alarm for 6 am",
+    "wake me up at 7:30 tomorrow",
+    "remind me at 10 pm with an alarm",
+    "set a buzzer for 5 in the morning",
+    "alarm me at 8",
+    "wake me up after 2 hours"
+  ],
+  "GET_WEATHER": [
+    "how is the weather today",
+    "what is the temperature in New York",
+    "is it going to rain in Delhi",
+    "what's the weather like outside",
+    "get the weather report for London",
+    "show me the climate in Mumbai",
+    "is it sunny in California"
+  ],
+  "GENERATE_PASSWORD": [
+    "generate a secure password",
+    "create a new password for me",
+    "i need a random password",
+    "generate a password",
+    "create a strong password of 12 characters",
+    "give me a unique password",
+    "make a password",
+    "new password",
+    "generate a random string",
+    "show me a secure password"
+  ],
+  "PHONE_CALL": [
+    "call my mom",
+    "make a phone call to Rahul",
+    "dial the number for John",
+    "start a call",
+    "place a call to someone",
+    "call rishabh"
+  ],
+  "UNLOCK_PHONE": [
+    "unlock my android phone",
+    "open the phone screen",
+    "unlock the device",
+    "bypass my phone password",
+    "get into my phone",
+    "unlock my mobile"
+  ],
+  "CHECK_NOTIFICATIONS": [
+    "check my phone notifications",
+    "show me what's on my notification bar",
+    "do i have any new messages on my phone",
+    "read my notifications",
+    "open my phone alerts",
+    "is there any update on my device"
+  ],
+  "CLOSE_JARVIS": [
+    "close the application",
+    "stop jarvis",
+    "bye jarvis",
+    "go away jarvis",
+    "terminate the program",
+    "that is all for today",
+    "exit the app",
+    "shutdown jarvis"
+  ]
+}

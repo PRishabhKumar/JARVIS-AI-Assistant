@@ -17,7 +17,6 @@ import webbrowser
 import pygame as py # for alarm clock
 from datetime import datetime
 import keyboard as kb
-from API_KEYS import api_keys
 import requests
 import string
 import random
@@ -26,38 +25,53 @@ import hugchat
 import pymongo
 import google.generativeai as genai
 import subprocess
+import time
+import threading
+from word2number import w2n
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from BACK_END import state
+
 def detectHotword():
-    porcupine = None
-    paud = None
-    audio_stream = None
-    try:
-        porcupine = pvporcupine.create(keywords=["jarvis", "alexa"]) # this module has pre-trained hotword detection for the names 'JARIVS' and "Alexa"
-        paud = pyaudio.PyAudio()
-        audio_stream = paud.open(rate=porcupine.sample_rate, channels = 1, format = pyaudio.paInt16, input=True, frames_per_buffer = porcupine.frame_length)
-        while True:
-            keyword = audio_stream.read(porcupine.frame_length)
-            keyword = struct.unpack_from("h"*porcupine.frame_length, keyword)
+    while True:
+        # If JARVIS is busy, don't even listen to audio to save resources and avoid feedback
+        if state.IS_BUSY:
+            time.sleep(1)
+            continue
+
+        porcupine = None
+        paud = None
+        audio_stream = None
+        try:
+            porcupine = pvporcupine.create(keywords=["jarvis", "alexa"]) 
+            paud = pyaudio.PyAudio()
+            audio_stream = paud.open(rate=porcupine.sample_rate, channels = 1, format = pyaudio.paInt16, input=True, frames_per_buffer = porcupine.frame_length)
             
-            keyword_index = porcupine.process(keyword)
-            
-            # if any keyowords are detected....
-            if(keyword_index>=0):
-                print("Hotword detected !!")
-                import pyautogui as gui # using pyautogui to simulate the pressing of win+j combination to activate JARVIS
-                gui.keyDown("win") # press the win key
-                gui.keyDown("j") # press the 'j' key
-                time.sleep(2) # wait for some time for the key press to be registered
-                gui.keyUp("win")  # lift up the win key
-    except Exception as e:
-        # cleaning up everything in case every thing goes well 
-        if(porcupine is not None):
-            porcupine.delete()
-        if(audio_stream is not None):
-            audio_stream.close()
-        if(paud is not None):
-            paud.terminate()    
-        else:
-            print(f"The following error occured : {e}")            
+            print("Listening for hotword...")
+            while not state.IS_BUSY: # Stay in loop as long as JARVIS is not busy
+                keyword = audio_stream.read(porcupine.frame_length)
+                keyword = struct.unpack_from("h"*porcupine.frame_length, keyword)
+                
+                keyword_index = porcupine.process(keyword)
+                
+                if(keyword_index>=0):
+                    print("Hotword detected !!")
+                    gui.hotkey("win", "j") # use hotkey for cleaner combination simulation
+                    # Small wait to let the command handler start
+                    time.sleep(1) 
+                    break # Exit inner loop to re-check state.IS_BUSY
+        except Exception as e:
+            print(f"Hotword Error: {e}")
+            time.sleep(2) 
+        finally:
+            if audio_stream:
+                audio_stream.close()
+            if paud:
+                paud.terminate()
+            if porcupine:
+                porcupine.delete()
 
 
 
@@ -99,22 +113,26 @@ def greetings():
 
 # Opening apps and websites using MongoDB database
 
-def open(string):
+def open(appName):
     client = pymongo.MongoClient("mongodb://localhost:27017/")
     db = client['JARVIS']
     collection = db['JARVISCollection']
 
     try:
-        appName = string.lower().split("open")[1].strip()
-        appInfo = collection.find_one({'name': appName}, {"_id":0, "path":1}) # this returns the complete dictionary of that particular app and we want to get the value stored for the 'path' key
+        # No more manual splitting! We use the appName directly from the NLP Brain.
+        if not appName:
+            speak("I didn't catch the name of the app sir.")
+            return
+
+        appInfo = collection.find_one({'name': appName.lower()}, {"_id":0, "path":1})
         if(not appInfo is None):
             speak(f"Opening {appName} sir")
             os.startfile(appInfo["path"])
         else:
-            speak("Either the app or the path to the app was not found !!!")
+            speak(f"I couldn't find {appName} in my database.")
             print("path not found !!")
     except Exception as e:
-        speak("The following error occured : ", e)
+        speak("An error occurred while opening the app.")
         print(f"Some error occured : {e}")
 
 
@@ -142,19 +160,28 @@ def getVideoName1(string):
 
 
 
-def searchAndPlayOnYT(string):
-    string = getVideoName(string) # get the name of the video to be played
-    print(f"Playing {string} on youtube sir....")
-    kit.playonyt(string)
+def searchAndPlayOnYT(video_name):
+    # If video_name is missing, we ask for it, otherwise we play directly
+    if not video_name:
+        speak("What video should I play on YouTube sir?")
+        video_name = takeCommand()
+        
+    print(f"Playing {video_name} on youtube sir....")
+    kit.playonyt(video_name)
     
     
-def playOnYT(string):
+def playOnYT(video_name):
+    # If the user just said "open youtube", open the site. 
+    # If they gave a video name, play it.
+    if not video_name:
+        os.startfile("https://www.youtube.com/")
+        return
+
     os.startfile("https://www.youtube.com/") # open youtube
     time.sleep(5) # wait for the screen to stabilize
     gui.click(710, 132) # click on the search bar
     time.sleep(2) # wait for complete loading
-    string = getVideoName1(string) # get the name of the video to be played
-    gui.write(string, interval=0.05) # type the query in the search bar
+    gui.write(video_name, interval=0.05) # type the query in the search bar
     time.sleep(2) # wait for some time
     gui.press('enter') # press enter to search 
     
@@ -168,14 +195,14 @@ def check_for_integer_in_command(string):
     return None
     
 # function to play songs using a local music library
-def playMusic(string):    
+def playMusic():    
     speak("Ok sir, opening the music library for you...")
     for i in range(len(musicLibrary.music_library_list)):        
         print(f"{i + 1}) {musicLibrary.folder_names[i]} ")
         print()    
     speak("Please select the folder number that you want to open..")
     folder_num = takeCommand()
-    eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
+    eel.sendersMessage(folder_num)
     #eel.getSenderMessages(choice)
     folder_number = check_for_integer_in_command(folder_num)
     
@@ -192,7 +219,7 @@ def playMusic(string):
                     num += 1                                       
                 speak("Please select the song number from the list to play it...")
                 song_num = takeCommand()
-                eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
+                eel.sendersMessage(song_num)
                 #eel.getSenderMessages(choice)
                 song_number = check_for_integer_in_command(song_num)
                 for i in range(len(temp_folder)):
@@ -209,133 +236,135 @@ def playMusic(string):
     
 # function for whatsapp automation
 
-def handleWhatsapp(string):
+def handleWhatsapp(contact_name):
     speak("Opening whatsapp sir....")
-    gui.press("win") # press the windows key to open the search bar 
-    time.sleep(2) # wait for some time
-    gui.write("whatsapp", interval=0.05) # type "whatsapp" into the search bar
+    gui.press("win") 
+    time.sleep(2) 
+    gui.write("whatsapp", interval=0.05) 
     time.sleep(1)
-    gui.press('Enter') # hit the enter key to open whatsapp
-    speak("Please tell me what you want to do now sir....")
-    string = takeCommand() # ask for the uer's query
-    eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-    if("send a message" in string.lower() or "message" in string.lower()):
-        string = string.split("to")[1] # split the string from the first occurence of "to" and from the resultng list, select the second element i.e. the name of the person to whom the message is to be sent
-        gui.click(253,  153) # click on teh search bar
-        time.sleep(1)
-        gui.write(string, interval=0.05) # type the name of the person in the search box
-        time.sleep(2) # wait for the searches to stabilize
-        gui.click(317, 222)# click on the first chat that appears after the search (i.e. the closest match)
-        speak("Please speak out the message you want to send !!!")
-        message = takeCommand()
-        eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-        gui.click(799, 991) # click on the message input box
-        time.sleep(1) # make sure the focus is correct on the message input box
-        gui.write(message, interval=0.05) # write the message with an interval of 0.1 seconds after every character (looks cool)
-        time.sleep(1) # wait for some time
-        gui.press("Enter") # hit the enter key to send the message
-        speak("Message sent sir....")
-        speak("Do you wish to send another message sir ?")
+    gui.press('Enter') 
+    
+    # If NLP didn't find a name, we ask for it
+    if not contact_name:
+        speak("To whom should I send the message?")
+        contact_name = takeCommand()
+
+    # Search for the contact
+    gui.click(253,  153) # click on the search bar
+    time.sleep(1)
+    gui.write(contact_name, interval=0.05) 
+    time.sleep(2) 
+    gui.click(317, 222)# click on the first chat
+    
+    speak("What is the message sir?")
+    message = takeCommand()
+    
+    gui.click(799, 991) # click on the message input box
+    time.sleep(1) 
+    gui.write(message, interval=0.05) 
+    time.sleep(0.5) 
+    gui.press("Enter") 
+    speak("Message sent sir.")
+    speak("Do you wish to send another message sir ?")
+    order = takeCommand()
+    eel.sendersMessage(order)
+    #eel.getSenderMessages(choice)
+    while "yes" in order.lower():            
+        speak("Do you want to send another message to the same person sir ??")
         order = takeCommand()
-        eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
+        eel.sendersMessage(order)
+    if "yes" in order.lower():                
+        speak("Please speak out the message to be sent :")
+        message = takeCommand()
+        eel.sendersMessage(message)
         #eel.getSenderMessages(choice)
-        while "yes" in order.lower():            
-            speak("Do you want to send another message to the same person sir ??")
+        gui.click(317, 222)  # Clicking on the chat to open it                
+        speak("Please speak out the message to be sent :")
+        order = takeCommand()
+        eel.sendersMessage(order)
+        #eel.getSenderMessages(choice)
+        gui.click(799, 991)  # Click the message input box
+        time.sleep(0.5)  # Ensure focus is on the message input box
+        gui.write(order.lower(), interval=0.05)  # Typing the message
+        gui.press('Enter')  # Hit the enter key to send the message                
+        speak("Message sent sir...")                
+        speak("Do you wish to send another message sir ??")
+        order = takeCommand()
+        eel.sendersMessage(order)
+        #eel.getSenderMessages(choice)
+        while "yes" in order.lower():                    
+            speak("Please speak out the message to be sent sir :")
             order = takeCommand()
-            eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
+            eel.sendersMessage(order)
             #eel.getSenderMessages(choice)
-            if "yes" in order.lower():                
-                speak("Please speak out the message to be sent :")
-                message = takeCommand()
-                eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                #eel.getSenderMessages(choice)
-                gui.click(317, 222)  # Clicking on the chat to open it                
-                speak("Please speak out the message to be sent :")
-                order = takeCommand()
-                eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                #eel.getSenderMessages(choice)
-                gui.click(799, 991)  # Click the message input box
-                time.sleep(0.5)  # Ensure focus is on the message input box
-                gui.write(order.lower(), interval=0.05)  # Typing the message
-                gui.press('Enter')  # Hit the enter key to send the message                
-                speak("Message sent sir...")                
-                speak("Do you wish to send another message sir ??")
-                order = takeCommand()
-                eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                #eel.getSenderMessages(choice)
-                while "yes" in order.lower():                    
-                    speak("Please speak out the message to be sent sir :")
-                    order = takeCommand()
-                    eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                    #eel.getSenderMessages(choice)
-                    gui.click(799, 991)  # Click the message input box
-                    time.sleep(0.5)  # Ensure focus is on the message input box
-                    gui.write(order.lower(), interval=0.05)  # Typing the message
-                    gui.press('enter') #pressing enter to send the message
-                    # gui.click(1884, 979)  # Clicking to send the message                    
-                    speak("Message sent sir...")                    
-                    speak("Do you wish to send another message sir ??")
-                    order = takeCommand()
-                    eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                    #eel.getSenderMessages(choice)
-                    if "no" in order.lower():                        
-                        speak("Ok sir stopped sending messages....")
-                        speak("Closing whatsapp sir ....")
-                        gui.press('Ctrl')
-                        gui.press('w') # press ctrl+w to close whatsapp
-                        
-                        break
-            elif "no" in order.lower() or "different" in order.lower():                
-                speak("Please tell me to whom you want to send the message :")
-                name = takeCommand()
-                eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                #eel.getSenderMessages(choice)
-                gui.click(253, 153)  # Clicking on the search bar
-                gui.write(name.lower(), interval=0.05)  
-                gui.click(317, 222)  # Clicking on the chat to open it                
-                speak("Please speak out the message to be sent :")
-                order = takeCommand()
-                eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                #eel.getSenderMessages(choice)
-                gui.click(799, 991)  # Click the message input box
-                time.sleep(0.5)  # Ensure focus is on the message input box
-                gui.write(order.lower(), interval=0.05)  # Typing the message
-                gui.press("Enter")  # Hit the enter key to send the message                
-                speak("Message sent sir...")                
-                speak("Do you wish to send another message sir ??")
-                order = takeCommand()
-                eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                #eel.getSenderMessages(choice)
-                while "yes" in order.lower():                    
-                    speak("Please tell me to whom you want to send the message sir :")
-                    name = takeCommand()
-                    eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                    #eel.getSenderMessages(choice)
-                    gui.click(253, 153)  # Clicking on the search bar
-                    gui.write(name.lower(), interval=0.5)  
-                    gui.click(317, 222)  # Clicking on the chat to open it
-                    
-                    speak("Please speak out the message to be sent :")
-                    order = takeCommand()
-                    eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                    #eel.getSenderMessages(choice)
-                    gui.click(799, 991)  # Click the message input box
-                    time.sleep(0.5)  # Ensure focus is on the message input box
-                    gui.write(order.lower(), interval=0.05)  # Typing the message
-                    gui.press('Enter')  # Hit the enter key to send the message                    
-                    speak("Message sent sir...")                    
-                    speak("Do you wish to send another messsage sir ??")
-                    order = takeCommand()
-                    eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
-                    #eel.getSenderMessages(choice)
-                    if "no" in order.lower():                        
-                        speak("Ok sir stopped sending messages....")                        
-                        speak("Closing whatsapp sir...")
-                        gui.click(1887, 11) #closing whatsapp
-                        break                
+            gui.click(799, 991)  # Click the message input box
+            time.sleep(0.5)  # Ensure focus is on the message input box
+            gui.write(order.lower(), interval=0.05)  # Typing the message
+            gui.press('enter') #pressing enter to send the message
+            # gui.click(1884, 979)  # Clicking to send the message                    
+            speak("Message sent sir...")                    
             speak("Do you wish to send another message sir ??")
             order = takeCommand()
-            eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
+            eel.sendersMessage(order)
+            #eel.getSenderMessages(choice)
+            if "no" in order.lower():                        
+                speak("Ok sir stopped sending messages....")
+                speak("Closing whatsapp sir ....")
+                gui.press('Ctrl')
+                gui.press('w') # press ctrl+w to close whatsapp
+                
+                break
+    elif "no" in order.lower() or "different" in order.lower():                
+        speak("Please tell me to whom you want to send the message :")
+        name = takeCommand()
+        eel.sendersMessage(name)
+        #eel.getSenderMessages(choice)
+        gui.click(253, 153)  # Clicking on the search bar
+        gui.write(name.lower(), interval=0.05)  
+        gui.click(317, 222)  # Clicking on the chat to open it                
+        speak("Please speak out the message to be sent :")
+        order = takeCommand()
+        eel.sendersMessage(order)
+        #eel.getSenderMessages(choice)
+        gui.click(799, 991)  # Click the message input box
+        time.sleep(0.5)  # Ensure focus is on the message input box
+        gui.write(order.lower(), interval=0.05)  # Typing the message
+        gui.press("Enter")  # Hit the enter key to send the message                
+        speak("Message sent sir...")                
+        speak("Do you wish to send another message sir ??")
+        order = takeCommand()
+        eel.sendersMessage(order)
+        #eel.getSenderMessages(choice)
+        while "yes" in order.lower():                    
+            speak("Please tell me to whom you want to send the message sir :")
+            name = takeCommand()
+            eel.sendersMessage(name)
+            #eel.getSenderMessages(choice)
+            gui.click(253, 153)  # Clicking on the search bar
+            gui.write(name.lower(), interval=0.5)  
+            gui.click(317, 222)  # Clicking on the chat to open it
+            
+            speak("Please speak out the message to be sent :")
+            order = takeCommand()
+            eel.sendersMessage(order)
+            #eel.getSenderMessages(choice)
+            gui.click(799, 991)  # Click the message input box
+            time.sleep(0.5)  # Ensure focus is on the message input box
+            gui.write(order.lower(), interval=0.05)  # Typing the message
+            gui.press('Enter')  # Hit the enter key to send the message                    
+            speak("Message sent sir...")                    
+            speak("Do you wish to send another messsage sir ??")
+            order = takeCommand()
+            eel.sendersMessage(order)
+            #eel.getSenderMessages(choice)
+            if "no" in order.lower():                        
+                speak("Ok sir stopped sending messages....")                        
+                speak("Closing whatsapp sir...")
+                gui.click(1887, 11) #closing whatsapp
+                break                
+            speak("Do you wish to send another message sir ??")
+            order = takeCommand()
+            eel.sendersMessage(order)
             
             ##eel.getSenderMessages(choice)
             if "no" in order.lower():                
@@ -344,60 +373,87 @@ def handleWhatsapp(string):
                 
 
 
-# function to set alarm
-
-def alarmClock(string):
-    if "set an alarm for" in string.lower():
-        time = string.lower().split('for')[1]
-    elif "wake me up at" in string.lower():
-        time = string.lower().split('at')[1]
-    
-    time = time.upper().strip()
-    time_parts = time.split(":")
-    hours = int(time_parts[0])
-    min = int(time_parts[1].split()[0])  # removes AM/PM
-    print(f"Ok sir. Alarm set for {time}")
-    if hours == 12 and ("A.M." in time or "a.m." in time):
-        hours = 0
-    elif ("P.M." in time or "p.m." in time.lower()) and hours < 12:
-        hours += 12
-
-    print(f"Hours = {hours}")
-    print(f"Minutes = {min}")
-    print(f"Alarm set for {hours}:{min}")
-
+def _alarm_loop(hours, minutes):
+    """Helper function to run the alarm loop in a background thread."""
     py.mixer.init()
+    print(f"DEBUG [Alarm Thread]: Waiting for {hours:02d}:{minutes:02d}...")
     while True:
         now = datetime.now()
-        if now.hour == hours and now.minute == min:
-            py.mixer.music.load(r"BACK_END\Assets\sound1.mp3")
-            py.mixer.music.play(-1) # this is used to play the sound infinitely until explicitly stopped
-            print("Alarm Ringing !!!")
-
-            kb.read_event()  # Wait for any key press
-            py.mixer.music.stop()
-            print("Alarm stopped !!")
+        if now.hour == hours and now.minute == minutes:
+            try:
+                py.mixer.music.load(r"BACK_END\Assets\sound1.mp3")
+                py.mixer.music.play(-1) 
+                print("\n[ALARM] Ringing !!!")
+                # Wait for any key press to stop the alarm
+                kb.read_event() 
+                py.mixer.music.stop()
+                print("[ALARM] Stopped.")
+            except Exception as e:
+                print(f"Alarm Playback Error: {e}")
             break
+        time.sleep(10) # check every 10 seconds to save CPU
+
+def alarmClock(time_str):
+    if not time_str:
+        speak("For what time should I set the alarm?")
+        time_str = takeCommand()
+    
+    try:
+        # Standardize string for parsing
+        original_time = time_str
+        time_str = time_str.upper().strip().replace(".", "")
+        
+        # Extract numbers (handles "10:30", "11 20", etc.)
+        numbers = re.findall(r'\d+', time_str)
+        if not numbers:
+            raise ValueError("No numbers found")
+            
+        hours = int(numbers[0])
+        minutes = int(numbers[1]) if len(numbers) > 1 else 0
+        
+        # Logic to handle PM/AM conversion
+        is_pm = "PM" in time_str or "P M" in time_str
+        is_am = "AM" in time_str or "A M" in time_str
+        
+        if is_pm and hours < 12:
+            hours += 12
+        elif is_am and hours == 12:
+            hours = 0
+            
+        speak(f"Ok sir, alarm set for {hours:02d}:{minutes:02d}")
+        print(f"Alarm confirmed for {hours:02d}:{minutes:02d}")
+
+        # Start the alarm in a background thread so JARVIS doesn't hang
+        alarm_thread = threading.Thread(target=_alarm_loop, args=(hours, minutes), daemon=True)
+        alarm_thread.start()
+
+    except Exception as e:
+        speak("There was an error in the time format. Please say it like '10 30 PM'.")
+        print(f"Alarm Error: {e}")
 
 
 # function to get the weather data using the weather API
 
-def getWeather(string): 
-    city = string.split("in")[1] # get the city from the string   
-    api_key = api_keys.weather_api
+def getWeather(city): 
+    if not city:
+        speak("Which city should I check the weather for?")
+        city = takeCommand()
+        
+    api_key = os.getenv("weatherAPI")
     base_url = "https://api.openweathermap.org/data/2.5/weather?q="
     complete_url = base_url + city + "&appid=" + api_key
     response = requests.get(complete_url)
+    
+    if response.status_code != 200:
+        speak(f"I couldn't get the weather for {city}. Please check the city name.")
+        return
+
     weather_data = response.json()
     
-    # print("RAW WEATHER DATA:", json.dumps(weather_data, indent=4))
-    # printing the raw data for reference purpose
-    
-    # covnert the raw JSON data to a proper dictionary format to get the data systematically and also convert the temperatures to degree celcius from kelvin 
     weather_report = {
         "LATITUDE": round(weather_data["coord"]["lat"]),
         "LONGITUDE": round(weather_data["coord"]["lon"]),
-        "WEATHER DESCRIPTION": weather_data["weather"][0]["description"],  # Fixed typo and corrected the key
+        "WEATHER DESCRIPTION": weather_data["weather"][0]["description"],  
         "CURRENT TEMPERATURE": round(weather_data["main"]["temp"] - 273.15, 3),
         "FEELS LIKE TEMPERATURE": round(weather_data["main"]["feels_like"] - 273.15, 3),
         "MAXIMUM TEMPERATURE": round(weather_data["main"]["temp_max"] - 273.15, 3),
@@ -411,7 +467,7 @@ def getWeather(string):
         "SUNSET": datetime.fromtimestamp(weather_data["sys"]["sunset"]).strftime('%I:%M:%S %p')
     }
     speak(f"Ok sir, here's the weather report for {city}")
-    speak(weather_report)
+    speak(f"The weather is currently {weather_report['WEATHER DESCRIPTION']} with a temperature of {weather_report['CURRENT TEMPERATURE']} degrees.")
 
 
 def generatePassword(length):
@@ -436,7 +492,7 @@ def handlePasswordGeneration(length):
     speak("The generated password is copied successfully onto your clip board")
     speak('Do you accept this password sir ??')
     order = takeCommand()
-    eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
+    eel.sendersMessage(order)
     while True:
         if("yes" in order.lower()):
             speak("Thank you sir for using my password generation services...")
@@ -444,8 +500,9 @@ def handlePasswordGeneration(length):
         elif("no" in order.lower() or "different" in order.lower() or "change it" in order.lower()):
             speak("The two possible actions are : \n1) Shuffle the existing password\n2) Generate a new password")
             speak("Please tell me your choice sir")
-            choice = check_for_integer_in_command(takeCommand()) # take the command and extract the option number from it
-            eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
+            cmd_input = takeCommand()
+            choice = check_for_integer_in_command(cmd_input)
+            eel.sendersMessage(cmd_input)
             if(choice == 1):
                 random.shuffle(password)
                 print(password)
@@ -453,7 +510,7 @@ def handlePasswordGeneration(length):
                 speak("The shuffled password has been copied to your cliipboard sir")
                 speak("Do you accept this password sir ??")
                 order = takeCommand()
-                eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
+                eel.sendersMessage(order)
             elif(choice == 2):
                 password = generatePassword(length)
                 print(password)
@@ -461,7 +518,7 @@ def handlePasswordGeneration(length):
                 speak("The new password has been copied to your clipboard sir....")
                 speak("Do you accept this password sir ??")
                 order = takeCommand()
-                eel.sendersMessage(string) # display whatever we speak to JARVIS in the chat history
+                eel.sendersMessage(order)
                 
 # function to integrate gemini API 
 
@@ -489,33 +546,28 @@ def chat_with_ai(model, query):
     
 #************************************************************ Android automation starts here #************************************************************
 
-def phoneCall(string):
-    if(string.lower().startswith("call")):
-        string = string.lower().replace("call ", "")
-        print(f'String after removing waste words : {string}')
-        if(" " in string):
-            name = string.replace(" ", "") # remove the space in case of multi-word names
-        else:
-            name = string           
-    elif("make a call" in string.lower()):
-        string = string.split("to")[1].strip().lower() # get the name by spplitting the string
-        if(" " in string):
-            name = string.replace(" ", "")
-        else:
-            name = string
-    # database connections
+def phoneCall(name):
+    if not name:
+        speak("Whom should I call sir?")
+        name = takeCommand()
+        
+    name = name.lower().replace(" ", "") # remove spaces for DB search
     
+    # database connections
     client = pymongo.MongoClient("mongodb://localhost:27017/")
     db = client['JARVIS']
     collection = db['JARVISCollection']
     
     # Search for the contact
-    speak(f"Calling {name} sir...")
-    contact = collection.find_one({"name":name}) # find the contact with the correct name
-    print(f"Contact name : {contact['name']}")
-    print(f"Phone number of contact : {contact['number']}")
-    command = f"adb shell am start -a android.intent.action.CALL -d tel:+91{contact['number']}"  
-    os.system(command)
+    contact = collection.find_one({"name": name})
+    if contact:
+        speak(f"Calling {name} sir...")
+        print(f"Contact name : {contact['name']}")
+        print(f"Phone number of contact : {contact['number']}")
+        command = f"adb shell am start -a android.intent.action.CALL -d tel:+91{contact['number']}"  
+        os.system(command)
+    else:
+        speak(f"I couldn't find {name} in your contacts.")
     
 def unlockPhone():
     speak("OK sir....")
